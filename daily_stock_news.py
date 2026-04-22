@@ -81,10 +81,10 @@ def fetch_article_content(url):
 
 def analyze_stock_news(ticker, company_name, title, content, position_size_pct):
     """Analyze stock news as an investment advisor using Claude."""
-    if not content:
-        return None
-
     try:
+        # Use title if no content available
+        analysis_content = content if content else title
+
         message = client.messages.create(
             model="claude-3-5-sonnet-20241022",
             max_tokens=200,
@@ -96,7 +96,7 @@ en geef praktisch advies. Je weet dat deze positie {position_size_pct}% van het 
 
 Titel: {title}
 
-Artikel: {content}
+Artikel: {analysis_content}
 
 Geef je analyse in dit format (max 4-5 zinnen):
 1. Wat gebeurde er? (1 zin)
@@ -109,10 +109,14 @@ Schrijf direct en praktisch, geen fluff."""
             ]
         )
         analysis = message.content[0].text.strip()
-        return analysis if analysis else None
+        if analysis:
+            return analysis
+        else:
+            print(f"Warning: Empty analysis for {ticker}")
+            return f"Nieuws: {title}"
     except Exception as e:
-        print(f"Error analyzing: {e}")
-        return None
+        print(f"Error analyzing {ticker}: {e}")
+        return f"Nieuws: {title}"
 
 def fetch_market_news():
     """Fetch top market news from multiple sources (last 24h)."""
