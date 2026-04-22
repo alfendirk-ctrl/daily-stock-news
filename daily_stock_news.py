@@ -16,40 +16,40 @@ import re
 from bs4 import BeautifulSoup
 from anthropic import Anthropic
 
-# Portfolio tickers
+# Portfolio with position sizes (%)
 PORTFOLIO = {
-    'ADBE': 'Adobe',
-    'COIN': 'Coinbase',
-    'VWRL': 'VWRL (All-World ETF)',
-    'SMH': 'VanEck Semiconductors',
-    'NFLX': 'Netflix',
-    'NVDA': 'Nvidia',
-    'GOOGL': 'Alphabet',
-    'ESPO': 'VanEck Gaming & Esports',
-    'VOW3': 'Volkswagen',
-    'SHELL': 'Shell',
-    'SQ': 'Block',
-    'AMZN': 'Amazon',
-    'ORCL': 'Oracle',
-    'PYPL': 'PayPal',
-    'PLTR': 'Palantir',
-    'QLYS': 'Qualys',
-    'NKE': 'Nike',
-    'SBUX': 'Starbucks',
-    'DUOL': 'Duolingo',
-    'NVO': 'Novo Nordisk ADR',
-    'DIS': 'Walt Disney',
-    'T': 'AT&T',
-    'ULVR': 'Unilever',
-    'PINS': 'Pinterest',
-    'SNAP': 'Snap',
-    'HPQ': 'HP Inc',
-    'KO': 'Coca-Cola',
-    'ALFEN': 'Alfen',
-    'NIO': 'NIO ADR',
-    'FIGMA': 'Figma',
-    'FCEL': 'FuelCell Energy',
-    'SPCE': 'Virgin Galactic',
+    'ADBE': {'name': 'Adobe', 'pct': 5.7},
+    'COIN': {'name': 'Coinbase', 'pct': 7.6},
+    'VWRL': {'name': 'VWRL (All-World ETF)', 'pct': 8.5},
+    'SMH': {'name': 'VanEck Semiconductors', 'pct': 4.3},
+    'NFLX': {'name': 'Netflix', 'pct': 3.6},
+    'NVDA': {'name': 'Nvidia', 'pct': 3.8},
+    'GOOGL': {'name': 'Alphabet', 'pct': 4.8},
+    'ESPO': {'name': 'VanEck Gaming & Esports', 'pct': 3.9},
+    'VOW3': {'name': 'Volkswagen', 'pct': 3.7},
+    'SHELL': {'name': 'Shell', 'pct': 3.0},
+    'SQ': {'name': 'Block', 'pct': 2.8},
+    'AMZN': {'name': 'Amazon', 'pct': 2.4},
+    'ORCL': {'name': 'Oracle', 'pct': 2.8},
+    'PYPL': {'name': 'PayPal', 'pct': 2.7},
+    'PLTR': {'name': 'Palantir', 'pct': 1.9},
+    'QLYS': {'name': 'Qualys', 'pct': 2.7},
+    'NKE': {'name': 'Nike', 'pct': 1.9},
+    'SBUX': {'name': 'Starbucks', 'pct': 1.9},
+    'DUOL': {'name': 'Duolingo', 'pct': 1.8},
+    'NVO': {'name': 'Novo Nordisk ADR', 'pct': 1.5},
+    'DIS': {'name': 'Walt Disney', 'pct': 2.0},
+    'T': {'name': 'AT&T', 'pct': 0.8},
+    'ULVR': {'name': 'Unilever', 'pct': 1.8},
+    'PINS': {'name': 'Pinterest', 'pct': 0.4},
+    'SNAP': {'name': 'Snap', 'pct': 0.3},
+    'HPQ': {'name': 'HP Inc', 'pct': 0.5},
+    'KO': {'name': 'Coca-Cola', 'pct': 1.2},
+    'ALFEN': {'name': 'Alfen', 'pct': 1.4},
+    'NIO': {'name': 'NIO ADR', 'pct': 0.8},
+    'FIGMA': {'name': 'Figma', 'pct': 0.4},
+    'FCEL': {'name': 'FuelCell Energy', 'pct': 0.0},
+    'SPCE': {'name': 'Virgin Galactic', 'pct': 0.0},
 }
 
 # Initialize Anthropic client
@@ -79,33 +79,39 @@ def fetch_article_content(url):
         print(f"Error fetching article: {e}")
         return None
 
-def summarize_article(title, content):
-    """Summarize article using Claude API."""
+def analyze_stock_news(ticker, company_name, title, content, position_size_pct):
+    """Analyze stock news as an investment advisor using Claude."""
     if not content:
         return None
 
     try:
         message = client.messages.create(
             model="claude-3-5-sonnet-20241022",
-            max_tokens=150,
+            max_tokens=200,
             messages=[
                 {
                     "role": "user",
-                    "content": f"""Geef een korte, bondige samenvatting van dit artikel in Nederlands (max 2-3 zinnen).
-Focus op wat het betekent voor beleggers. Wees direct en praktisch.
+                    "content": f"""Je bent een ervaren beleggingsadviseur. Analyseer dit nieuws over {company_name} ({ticker})
+en geef praktisch advies. Je weet dat deze positie {position_size_pct}% van het portfolio is.
 
 Titel: {title}
 
-Inhoud: {content}
+Artikel: {content}
 
-Samenvatting (zonder inleiding):"""
+Geef je analyse in dit format (max 4-5 zinnen):
+1. Wat gebeurde er? (1 zin)
+2. Impact voor beleggers: BULLISH / BEARISH / NEUTRAAL (+ korte uitleg, 1 zin)
+3. Relevantie voor jouw positie (rekening houdend met {position_size_pct}% grootte): (1 zin)
+4. Wat zou je moeten doen? (1 zin advies: HOLD/BUY/SELL/MONITOR)
+
+Schrijf direct en praktisch, geen fluff."""
                 }
             ]
         )
-        summary = message.content[0].text.strip()
-        return summary if summary else None
+        analysis = message.content[0].text.strip()
+        return analysis if analysis else None
     except Exception as e:
-        print(f"Error summarizing: {e}")
+        print(f"Error analyzing: {e}")
         return None
 
 def fetch_market_news():
@@ -175,12 +181,30 @@ def fetch_market_news():
             title = re.sub(r'\s*-\s*(Reuters|Bloomberg|MarketWatch|Google News|AP|AFP|Yahoo|CNBC).*$', '', title)
             item['title'] = title
 
-            # Fetch and summarize
+            # Fetch and summarize market news
             if item['link']:
                 print(f"  📰 Summarizing: {title[:50]}...")
                 content = fetch_article_content(item['link'])
-                summary = summarize_article(title, content)
-                item['summary'] = summary
+                if content:
+                    try:
+                        msg = client.messages.create(
+                            model="claude-3-5-sonnet-20241022",
+                            max_tokens=150,
+                            messages=[{
+                                "role": "user",
+                                "content": f"""Geef een korte, bondige samenvatting van dit marktnieuws in Nederlands (max 2-3 zinnen).
+Focus op wat het betekent voor beleggers. Wees direct en praktisch.
+
+Titel: {title}
+
+Inhoud: {content}
+
+Samenvatting:"""
+                            }]
+                        )
+                        item['summary'] = msg.content[0].text.strip()
+                    except:
+                        item['summary'] = title
 
             unique_items.append(item)
             seen_titles.add(item['title'])
@@ -189,33 +213,56 @@ def fetch_market_news():
 
     return unique_items
 
-def fetch_portfolio_news():
-    """Fetch news about portfolio stocks (last 24h)."""
+def fetch_portfolio_news(portfolio_positions):
+    """Fetch and analyze portfolio news with advisor perspective."""
     news_items = {}
+
+    # Strong keywords for material news only
+    material_keywords = [
+        'earnings beat', 'earnings miss', 'beat estimates', 'missed estimates',
+        'guidance raised', 'guidance lowered', 'outlook increased', 'outlook cut',
+        'ceo resigns', 'ceo replaced', 'cfo resigns', 'new ceo', 'new cfo',
+        'acquisition', 'merger', 'acquired by', 'buyout',
+        'bankruptcy', 'restructuring', 'debt concern',
+        'analyst upgrade', 'analyst downgrade', 'price target',
+        'lawsuit', 'sec investigation', 'regulatory',
+        'dividend increase', 'dividend cut', 'stock split',
+        'product launch', 'major deal', 'partnership', 'contract win',
+        'market share', 'competitive threat'
+    ]
 
     for ticker, company_name in PORTFOLIO.items():
         try:
             feed = feedparser.parse(f'https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}')
 
-            for entry in feed.entries[:2]:
+            for entry in feed.entries[:3]:
                 pub_date = entry.get('published_parsed')
                 if pub_date:
                     pub_datetime = datetime(*pub_date[:6])
                     if datetime.now() - pub_datetime < timedelta(hours=24):
-                        title = entry.title.lower()
-                        if any(kw in title for kw in ['earn', 'guidance', 'ipo', 'ceo', 'cfo', 'dividend', 'acquisition', 'merger', 'analyst', 'upgrade', 'downgrade', 'deal', 'lawsuit', 'sec', 'regulation', 'stock split']):
+                        title_lower = entry.title.lower()
+                        # Only include truly material news
+                        if any(kw in title_lower for kw in material_keywords):
                             if ticker not in news_items:
-                                # Fetch and summarize
                                 link = entry.get('link', '')
-                                print(f"  📰 Summarizing {ticker}: {entry.title[:50]}...")
+                                print(f"  📰 Analyzing {ticker}: {entry.title[:50]}...")
                                 content = fetch_article_content(link) if link else None
-                                summary = summarize_article(entry.title, content)
+
+                                # Get position size
+                                position_info = portfolio_positions.get(ticker, {})
+                                position_pct = position_info.get('pct', 0)
+
+                                # Analyze as advisor
+                                analysis = analyze_stock_news(
+                                    ticker, company_name, entry.title, content, position_pct
+                                )
 
                                 news_items[ticker] = {
                                     'company': company_name,
                                     'title': entry.title,
-                                    'summary': summary,
+                                    'analysis': analysis,
                                     'link': link,
+                                    'position_pct': position_pct,
                                 }
                             break
         except Exception as e:
@@ -223,7 +270,7 @@ def fetch_portfolio_news():
 
     return news_items
 
-def generate_email_html(market_news, portfolio_news):
+def generate_email_html(market_news, portfolio_news, portfolio_positions):
     """Generate HTML email body with better formatting."""
     today = datetime.now().strftime('%d %B %Y')
 
@@ -284,17 +331,19 @@ def generate_email_html(market_news, portfolio_news):
 
     if portfolio_news:
         for ticker, info in portfolio_news.items():
-            summary = info.get('summary', info['title'])
+            analysis = info.get('analysis', info['title'])
             link = info.get('link', '#')
+            position_pct = info.get('position_pct', 0)
 
             html += f"""
         <div class="news-item">
             <div class="news-title">
                 <span class="ticker">{ticker}</span> {info['company']}
+                <span style="font-size: 12px; color: #999; margin-left: 8px;">({position_pct}% portfolio)</span>
             </div>
-            <div class="news-summary">{summary}</div>
+            <div class="news-summary"><strong style="color: #667eea;">Adviseur analyse:</strong><br/>{analysis}</div>
             <div class="news-source">
-                <a href="{link}" class="link">Lees artikel →</a>
+                <a href="{link}" class="link">Lees originele artikel →</a>
             </div>
         </div>
 """
@@ -342,18 +391,21 @@ def send_email(to_email, subject, html_body):
 
 def main():
     """Main function."""
+    # Create portfolio positions dict for advisor context
+    portfolio_positions = {ticker: info for ticker, info in PORTFOLIO.items()}
+
     print("🔄 Fetching market news...")
     market_news = fetch_market_news()
     print(f"   Found {len(market_news)} market news items\n")
 
     print("🔄 Fetching portfolio news...")
-    portfolio_news = fetch_portfolio_news()
+    portfolio_news = fetch_portfolio_news(portfolio_positions)
     print(f"   Found {len(portfolio_news)} portfolio news items\n")
 
     # Generate email
     today = datetime.now().strftime('%d %B %Y')
     subject = f"📌 Dagelijkse beursupdate – {today}"
-    html_body = generate_email_html(market_news, portfolio_news)
+    html_body = generate_email_html(market_news, portfolio_news, portfolio_positions)
 
     print("📧 Sending email...\n")
 
