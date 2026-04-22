@@ -1,0 +1,30 @@
+name: Daily Stock News Email
+
+on:
+  schedule:
+    # Run every day at 20:00 (8 PM) UTC
+    # Adjust timezone if needed: UTC+1 = 19:00, UTC+2 = 18:00
+    - cron: '0 20 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  send-news:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily news script
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: python daily_stock_news.py
