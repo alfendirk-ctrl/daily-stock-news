@@ -348,9 +348,34 @@ def generate_email_html(market_news, portfolio_news, portfolio_positions):
 
     if portfolio_news:
         for ticker, info in portfolio_news.items():
-            analysis = info.get('analysis', info['title'])
+            analysis = info.get('analysis', '')
             link = info.get('link', '#')
             position_pct = info.get('position_pct', 0)
+
+            # Parse analysis into sections
+            analysis_html = f"""
+            <div style="background: #f0f4ff; padding: 12px; border-radius: 4px; margin-top: 8px; font-size: 13px; line-height: 1.6;">
+"""
+
+            # Split analysis by keywords to create clear sections
+            sections = analysis.split('\n')
+            for section in sections:
+                section = section.strip()
+                if not section:
+                    continue
+
+                if 'gebeurde' in section.lower() or 'wat' in section.lower():
+                    analysis_html += f'<div style="margin-bottom: 8px;"><strong style="color: #667eea;">📰 Wat gebeurde:</strong><br/>{section}</div>'
+                elif 'impact' in section.lower() or 'bullish' in section.lower() or 'bearish' in section.lower():
+                    analysis_html += f'<div style="margin-bottom: 8px;"><strong style="color: #667eea;">📊 Impact:</strong><br/>{section}</div>'
+                elif 'positie' in section.lower() or 'jouw' in section.lower():
+                    analysis_html += f'<div style="margin-bottom: 8px;"><strong style="color: #667eea;">🎯 Voor jouw positie:</strong><br/>{section}</div>'
+                elif 'advies' in section.lower() or 'hold' in section.lower() or 'buy' in section.lower() or 'sell' in section.lower():
+                    analysis_html += f'<div style="margin-bottom: 0;"><strong style="color: #667eea;">✅ Advies:</strong><br/>{section}</div>'
+                else:
+                    analysis_html += f'<div style="margin-bottom: 8px;">{section}</div>'
+
+            analysis_html += '</div>'
 
             html += f"""
         <div class="news-item">
@@ -358,8 +383,8 @@ def generate_email_html(market_news, portfolio_news, portfolio_positions):
                 <span class="ticker">{ticker}</span> {info['company']}
                 <span style="font-size: 12px; color: #999; margin-left: 8px;">({position_pct}% portfolio)</span>
             </div>
-            <div class="news-summary"><strong style="color: #667eea;">Adviseur analyse:</strong><br/>{analysis}</div>
-            <div class="news-source">
+            {analysis_html}
+            <div class="news-source" style="margin-top: 10px;">
                 <a href="{link}" class="link">Lees originele artikel →</a>
             </div>
         </div>
