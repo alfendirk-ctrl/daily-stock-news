@@ -261,10 +261,12 @@ def fetch_portfolio_news(portfolio_positions):
                                     ticker, company_name, entry.title, content, position_pct
                                 )
 
+                                print(f"    Analysis result: {analysis[:50] if analysis else 'None'}...")
+
                                 news_items[ticker] = {
                                     'company': company_name,
                                     'title': entry.title,
-                                    'analysis': analysis,
+                                    'analysis': analysis if analysis else f"📰 {entry.title}",
                                     'link': link,
                                     'position_pct': position_pct,
                                 }
