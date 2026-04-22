@@ -85,38 +85,47 @@ def analyze_stock_news(ticker, company_name, title, content, position_size_pct):
         # Use title if no content available
         analysis_content = content if content else title
 
+        print(f"    Calling Claude API for {ticker}...")
         message = client.messages.create(
             model="claude-3-5-sonnet-20241022",
-            max_tokens=200,
+            max_tokens=250,
             messages=[
                 {
                     "role": "user",
-                    "content": f"""Je bent een ervaren beleggingsadviseur. Analyseer dit nieuws over {company_name} ({ticker})
-en geef praktisch advies. Je weet dat deze positie {position_size_pct}% van het portfolio is.
+                    "content": f"""Je bent een ervaren beleggingsadviseur. Analyseer dit nieuws over {company_name} ({ticker}).
+Jouw positie: {position_size_pct}% van portfolio.
 
-Titel: {title}
+TITEL: {title}
 
-Artikel: {analysis_content}
+ARTIKEL INHOUD:
+{analysis_content}
 
-Geef je analyse in dit format (max 4-5 zinnen):
-1. Wat gebeurde er? (1 zin)
-2. Impact voor beleggers: BULLISH / BEARISH / NEUTRAAL (+ korte uitleg, 1 zin)
-3. Relevantie voor jouw positie (rekening houdend met {position_size_pct}% grootte): (1 zin)
-4. Wat zou je moeten doen? (1 zin advies: HOLD/BUY/SELL/MONITOR)
+GEEF ANALYSE IN DIT EXACT FORMAT (geen nummers, gewoon tekst):
 
-Schrijf direct en praktisch, geen fluff."""
+Wat gebeurde: [1 zin wat er gebeurde]
+
+Impact: [BULLISH/BEARISH/NEUTRAAL] - [kort waarom]
+
+Voor jouw positie: [1 zin relevantie]
+
+Advies: [HOLD/BUY/SELL/MONITOR] - [1 zin waarom]
+
+Wees praktisch en direct, geen fluff."""
                 }
             ]
         )
         analysis = message.content[0].text.strip()
-        if analysis:
+        print(f"    Claude response: {analysis[:80]}...")
+        if analysis and len(analysis) > 10:
             return analysis
         else:
-            print(f"Warning: Empty analysis for {ticker}")
-            return f"Nieuws: {title}"
+            print(f"    ERROR: Invalid analysis received")
+            return None
     except Exception as e:
-        print(f"Error analyzing {ticker}: {e}")
-        return f"Nieuws: {title}"
+        print(f"    CLAUDE API ERROR for {ticker}: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def fetch_market_news():
     """Fetch top market news from multiple sources (last 24h)."""
@@ -261,15 +270,17 @@ def fetch_portfolio_news(portfolio_positions):
                                     ticker, company_name, entry.title, content, position_pct
                                 )
 
-                                print(f"    Analysis result: {analysis[:50] if analysis else 'None'}...")
-
-                                news_items[ticker] = {
-                                    'company': company_name,
-                                    'title': entry.title,
-                                    'analysis': analysis if analysis else f"📰 {entry.title}",
-                                    'link': link,
-                                    'position_pct': position_pct,
-                                }
+                                if analysis:
+                                    news_items[ticker] = {
+                                        'company': company_name,
+                                        'title': entry.title,
+                                        'analysis': analysis,
+                                        'link': link,
+                                        'position_pct': position_pct,
+                                    }
+                                    print(f"    ✅ Analysis added for {ticker}")
+                                else:
+                                    print(f"    ⚠️  Analysis failed for {ticker}, skipping")
                             break
         except Exception as e:
             pass
