@@ -86,7 +86,7 @@ def summarize_article(title, content):
 
     try:
         message = client.messages.create(
-            model="claude-opus-4-7",
+            model="claude-3-5-sonnet-20241022",
             max_tokens=150,
             messages=[
                 {
