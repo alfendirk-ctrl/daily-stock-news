@@ -2,6 +2,7 @@
 """
 Daily stock news emailer for portfolio.
 Gathers news about portfolio stocks and market news, sends daily email via Gmail.
+Includes AI-powered article summaries via Claude API.
 """
 
 import os
@@ -11,8 +12,9 @@ import requests
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from urllib.parse import quote
 import re
+from bs4 import BeautifulSoup
+from anthropic import Anthropic
 
 # Portfolio tickers
 PORTFOLIO = {
@@ -50,13 +52,69 @@ PORTFOLIO = {
     'SPCE': 'Virgin Galactic',
 }
 
+# Initialize Anthropic client
+client = Anthropic()
+
+def fetch_article_content(url):
+    """Fetch and extract article content from URL."""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(url, timeout=10, headers=headers)
+        response.encoding = 'utf-8'
+
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Remove script and style elements
+        for script in soup(['script', 'style']):
+            script.decompose()
+
+        # Get text
+        text = soup.get_text(separator=' ', strip=True)
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        return text[:2000] if len(text) > 100 else None
+    except Exception as e:
+        print(f"Error fetching article: {e}")
+        return None
+
+def summarize_article(title, content):
+    """Summarize article using Claude API."""
+    if not content:
+        return None
+
+    try:
+        message = client.messages.create(
+            model="claude-opus-4-7",
+            max_tokens=150,
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"""Geef een korte, bondige samenvatting van dit artikel in Nederlands (max 2-3 zinnen).
+Focus op wat het betekent voor beleggers. Wees direct en praktisch.
+
+Titel: {title}
+
+Inhoud: {content}
+
+Samenvatting (zonder inleiding):"""
+                }
+            ]
+        )
+        summary = message.content[0].text.strip()
+        return summary if summary else None
+    except Exception as e:
+        print(f"Error summarizing: {e}")
+        return None
+
 def fetch_market_news():
     """Fetch top market news from multiple sources (last 24h)."""
     news_items = []
 
     # Google News RSS - Markets
     try:
-        feed = feedparser.parse('https://news.google.com/rss/topics/CAAqJAgKIh5CVVNIX0dueHZSRkFTVkhRPQ?hl=en&gl=US&ceid=US:en')
+        feed = feedparser.parse('https://news.google.com/rss/topics/CAAqJAgKIh5CVVNIX0dveHZSRkFTVkhRPQ?hl=en&gl=US&ceid=US:en')
         for entry in feed.entries[:5]:
             pub_date = entry.get('published_parsed')
             if pub_date:
@@ -64,9 +122,9 @@ def fetch_market_news():
                 if datetime.now() - pub_datetime < timedelta(hours=24):
                     news_items.append({
                         'title': entry.title,
+                        'link': entry.get('link', ''),
                         'source': 'Google News',
                         'date': pub_datetime,
-                        'relevance': 'market'
                     })
     except Exception as e:
         print(f"Error fetching Google News: {e}")
@@ -81,14 +139,14 @@ def fetch_market_news():
                 if datetime.now() - pub_datetime < timedelta(hours=24):
                     news_items.append({
                         'title': entry.title,
+                        'link': entry.get('link', ''),
                         'source': 'MarketWatch',
                         'date': pub_datetime,
-                        'relevance': 'market'
                     })
     except Exception as e:
         print(f"Error fetching MarketWatch: {e}")
 
-    # Reuters Markets (if available)
+    # Reuters
     try:
         feed = feedparser.parse('https://feeds.reuters.com/reuters/businessNews')
         for entry in feed.entries[:5]:
@@ -96,23 +154,34 @@ def fetch_market_news():
             if pub_date:
                 pub_datetime = datetime(*pub_date[:6])
                 if datetime.now() - pub_datetime < timedelta(hours=24):
-                    # Only include if it mentions markets/stocks/macro
-                    if any(word in entry.title.lower() for word in ['stock', 'market', 'fed', 'ecb', 'inflation', 'earnings', 'economy']):
+                    if any(w in entry.title.lower() for w in ['stock', 'market', 'fed', 'ecb', 'inflation', 'earnings']):
                         news_items.append({
                             'title': entry.title,
+                            'link': entry.get('link', ''),
                             'source': 'Reuters',
                             'date': pub_datetime,
-                            'relevance': 'market'
                         })
     except Exception as e:
         print(f"Error fetching Reuters: {e}")
 
-    # Sort by date and return top 5 unique
+    # Sort and deduplicate
     news_items.sort(key=lambda x: x['date'], reverse=True)
     seen_titles = set()
     unique_items = []
+
     for item in news_items:
         if item['title'] not in seen_titles:
+            title = item['title'].strip()
+            title = re.sub(r'\s*-\s*(Reuters|Bloomberg|MarketWatch|Google News|AP|AFP|Yahoo|CNBC).*$', '', title)
+            item['title'] = title
+
+            # Fetch and summarize
+            if item['link']:
+                print(f"  📰 Summarizing: {title[:50]}...")
+                content = fetch_article_content(item['link'])
+                summary = summarize_article(title, content)
+                item['summary'] = summary
+
             unique_items.append(item)
             seen_titles.add(item['title'])
             if len(unique_items) >= 5:
@@ -126,73 +195,126 @@ def fetch_portfolio_news():
 
     for ticker, company_name in PORTFOLIO.items():
         try:
-            # Try Yahoo Finance RSS
             feed = feedparser.parse(f'https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}')
 
-            for entry in feed.entries[:2]:  # Just check first 2 entries per stock
+            for entry in feed.entries[:2]:
                 pub_date = entry.get('published_parsed')
                 if pub_date:
                     pub_datetime = datetime(*pub_date[:6])
                     if datetime.now() - pub_datetime < timedelta(hours=24):
-                        # Filter for relevant keywords
                         title = entry.title.lower()
-                        if any(keyword in title for keyword in ['earn', 'guidance', 'ipo', 'ceo', 'cfo', 'dividend', 'acquisition', 'merger', 'analyst', 'upgrade', 'downgrade', 'deal', 'lawsuit', 'sec', 'regulation', 'stock split']):
+                        if any(kw in title for kw in ['earn', 'guidance', 'ipo', 'ceo', 'cfo', 'dividend', 'acquisition', 'merger', 'analyst', 'upgrade', 'downgrade', 'deal', 'lawsuit', 'sec', 'regulation', 'stock split']):
                             if ticker not in news_items:
+                                # Fetch and summarize
+                                link = entry.get('link', '')
+                                print(f"  📰 Summarizing {ticker}: {entry.title[:50]}...")
+                                content = fetch_article_content(link) if link else None
+                                summary = summarize_article(entry.title, content)
+
                                 news_items[ticker] = {
                                     'company': company_name,
-                                    'news': entry.title
+                                    'title': entry.title,
+                                    'summary': summary,
+                                    'link': link,
                                 }
                             break
         except Exception as e:
-            pass  # Skip on error
+            pass
 
     return news_items
 
-def generate_email_body(market_news, portfolio_news):
-    """Generate email body in the specified format."""
+def generate_email_html(market_news, portfolio_news):
+    """Generate HTML email body with better formatting."""
     today = datetime.now().strftime('%d %B %Y')
 
-    body = f"""Hallo,
+    html = f"""<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 5px; margin-bottom: 20px; }}
+        .header h1 {{ margin: 0; font-size: 24px; }}
+        .section {{ margin-bottom: 30px; }}
+        .section h2 {{ color: #667eea; border-bottom: 2px solid #667eea; padding-bottom: 10px; font-size: 18px; }}
+        .news-item {{ background: #f9f9f9; padding: 15px; margin-bottom: 15px; border-left: 4px solid #667eea; border-radius: 3px; }}
+        .news-title {{ font-weight: bold; color: #333; margin-bottom: 8px; }}
+        .news-summary {{ color: #555; margin-bottom: 8px; font-size: 14px; }}
+        .news-source {{ color: #999; font-size: 12px; }}
+        .ticker {{ background: #667eea; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 12px; }}
+        .link {{ color: #667eea; text-decoration: none; font-size: 12px; }}
+        .link:hover {{ text-decoration: underline; }}
+        .footer {{ color: #999; font-size: 12px; margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd; }}
+        .empty {{ color: #999; font-style: italic; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📈 Dagelijkse Beursupdate</h1>
+        <p style="margin: 0; opacity: 0.9;">{today}</p>
+    </div>
 
-Hier is de korte beursupdate van vandaag.
-
-1) Belangrijk markt-/macro nieuws (Top 5)
-
+    <div class="section">
+        <h2>📊 Belangrijk Markt- & Macronieuws</h2>
 """
 
-    # Market news
     if market_news:
-        for i, news in enumerate(market_news[:5], 1):
-            # Clean title
-            title = news['title'].strip()
-            # Remove source markers like "- Reuters" at the end
-            title = re.sub(r'\s*-\s*(Reuters|Bloomberg|Reuters|MarketWatch|Google News|AP|AFP).*$', '', title)
-            body += f"* {title}\n"
+        for news in market_news[:5]:
+            summary = news.get('summary', 'Geen samenvatting beschikbaar')
+            link = news.get('link', '#')
+            source = news.get('source', 'Bron onbekend')
+
+            html += f"""
+        <div class="news-item">
+            <div class="news-title">{news['title']}</div>
+            <div class="news-summary">{summary}</div>
+            <div class="news-source">
+                Bron: <strong>{source}</strong> | <a href="{link}" class="link">Lees meer →</a>
+            </div>
+        </div>
+"""
     else:
-        body += "* Geen significant marktnieuws vandaag.\n"
+        html += '<div class="empty">➡️ Geen significant marktnieuws vandaag.</div>'
 
-    body += "\n2) Portfolio nieuws\n\n"
+    html += """
+    </div>
 
-    # Portfolio news
+    <div class="section">
+        <h2>🎯 Portfolio Nieuws</h2>
+"""
+
     if portfolio_news:
         for ticker, info in portfolio_news.items():
-            title = info['news'].strip()
-            title = re.sub(r'\s*-\s*(Reuters|Bloomberg|Reuters|MarketWatch|Yahoo Finance).*$', '', title)
-            body += f"* {info['company']} ({ticker}): {title}\n"
+            summary = info.get('summary', info['title'])
+            link = info.get('link', '#')
+
+            html += f"""
+        <div class="news-item">
+            <div class="news-title">
+                <span class="ticker">{ticker}</span> {info['company']}
+            </div>
+            <div class="news-summary">{summary}</div>
+            <div class="news-source">
+                <a href="{link}" class="link">Lees artikel →</a>
+            </div>
+        </div>
+"""
     else:
-        body += "➡️ Geen belangrijk nieuws over portfolio-aandelen vandaag.\n"
+        html += '<div class="empty">➡️ Geen belangrijk nieuws over portfolio-aandelen vandaag.</div>'
 
-    body += "\n3) Alerts / Actiepunten\n\n"
-    body += "* 👀 Controleer je portefeuille op sterke marktbewegingen\n"
-    body += "* ✅ Zorg dat je al je research up-to-date is\n"
-    body += f"* 📅 Update van {today}\n"
+    html += f"""
+    </div>
 
-    body += "\nGroet,\n—"
+    <div class="footer">
+        <p>🔄 Update van {today} • Volgende update morgen om 20:00 UTC</p>
+        <p>Tip: Zorg dat je deze e-mails niet mist door ze in een separate label op te slaan.</p>
+    </div>
+</body>
+</html>
+"""
+    return html
 
-    return body
-
-def send_email(to_email, subject, body):
-    """Send email via Gmail SMTP."""
+def send_email(to_email, subject, html_body):
+    """Send HTML email via Gmail SMTP."""
     gmail_user = os.getenv('GMAIL_USER')
     gmail_app_password = os.getenv('GMAIL_APP_PASSWORD')
 
@@ -201,16 +323,13 @@ def send_email(to_email, subject, body):
         return False
 
     try:
-        # Create message
         msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
         msg['From'] = gmail_user
         msg['To'] = to_email
 
-        # Attach body
-        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
 
-        # Send via Gmail
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(gmail_user, gmail_app_password)
             server.sendmail(gmail_user, to_email, msg.as_string())
@@ -225,23 +344,21 @@ def main():
     """Main function."""
     print("🔄 Fetching market news...")
     market_news = fetch_market_news()
-    print(f"   Found {len(market_news)} market news items")
+    print(f"   Found {len(market_news)} market news items\n")
 
     print("🔄 Fetching portfolio news...")
     portfolio_news = fetch_portfolio_news()
-    print(f"   Found {len(portfolio_news)} portfolio news items")
+    print(f"   Found {len(portfolio_news)} portfolio news items\n")
 
     # Generate email
     today = datetime.now().strftime('%d %B %Y')
     subject = f"📌 Dagelijkse beursupdate – {today}"
-    body = generate_email_body(market_news, portfolio_news)
+    html_body = generate_email_html(market_news, portfolio_news)
 
-    print(f"\n📧 Composing email...\n")
-    print(body)
-    print("\n" + "="*60)
+    print("📧 Sending email...\n")
 
     # Send email
-    if send_email('alfendirk@gmail.com', subject, body):
+    if send_email('alfendirk@gmail.com', subject, html_body):
         print("\n✅ Daily stock news email sent successfully!")
     else:
         print("\n❌ Failed to send email")
