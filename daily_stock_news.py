@@ -231,8 +231,9 @@ def fetch_portfolio_news(portfolio_positions):
         'market share', 'competitive threat'
     ]
 
-    for ticker, company_name in PORTFOLIO.items():
+    for ticker, company_info in PORTFOLIO.items():
         try:
+            company_name = company_info['name']
             feed = feedparser.parse(f'https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}')
 
             for entry in feed.entries[:3]:
@@ -249,8 +250,7 @@ def fetch_portfolio_news(portfolio_positions):
                                 content = fetch_article_content(link) if link else None
 
                                 # Get position size
-                                position_info = portfolio_positions.get(ticker, {})
-                                position_pct = position_info.get('pct', 0)
+                                position_pct = company_info.get('pct', 0)
 
                                 # Analyze as advisor
                                 analysis = analyze_stock_news(
