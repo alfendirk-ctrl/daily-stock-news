@@ -208,8 +208,13 @@ Samenvatting:"""
                             }]
                         )
                         item['summary'] = msg.content[0].text.strip()
-                    except:
-                        item['summary'] = title
+                    except Exception as e:
+                        print(f"ERROR summarizing market news: {e}")
+                        item['summary'] = None
+                else:
+                    item['summary'] = None
+            else:
+                item['summary'] = None
 
             unique_items.append(item)
             seen_titles.add(item['title'])
@@ -311,7 +316,9 @@ def generate_email_html(market_news, portfolio_news, portfolio_positions):
 
     if market_news:
         for news in market_news[:5]:
-            summary = news.get('summary', 'Geen samenvatting beschikbaar')
+            summary = news.get('summary')
+            if not summary:
+                summary = news['title']  # Fallback to title
             link = news.get('link', '#')
             source = news.get('source', 'Bron onbekend')
 
