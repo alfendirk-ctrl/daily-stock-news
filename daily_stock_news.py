@@ -85,7 +85,6 @@ def analyze_stock_news(ticker, company_name, title, content, position_size_pct):
         # Use title if no content available
         analysis_content = content if content else title
 
-        print(f"    Calling Claude API for {ticker}...")
         message = client.messages.create(
             model="claude-3-5-sonnet-20241022",
             max_tokens=250,
@@ -115,16 +114,10 @@ Wees praktisch en direct, geen fluff."""
             ]
         )
         analysis = message.content[0].text.strip()
-        print(f"    Claude response: {analysis[:80]}...")
         if analysis and len(analysis) > 10:
             return analysis
-        else:
-            print(f"    ERROR: Invalid analysis received")
-            return None
+        return None
     except Exception as e:
-        print(f"    CLAUDE API ERROR for {ticker}: {e}")
-        import traceback
-        traceback.print_exc()
         return None
 
 def fetch_market_news():
@@ -196,7 +189,6 @@ def fetch_market_news():
 
             # Fetch and summarize market news
             if item['link']:
-                print(f"  📰 Summarizing: {title[:50]}...")
                 content = fetch_article_content(item['link'])
                 if content:
                     try:
@@ -259,7 +251,6 @@ def fetch_portfolio_news(portfolio_positions):
                         if any(kw in title_lower for kw in material_keywords):
                             if ticker not in news_items:
                                 link = entry.get('link', '')
-                                print(f"  📰 Analyzing {ticker}: {entry.title[:50]}...")
                                 content = fetch_article_content(link) if link else None
 
                                 # Get position size
@@ -278,9 +269,6 @@ def fetch_portfolio_news(portfolio_positions):
                                         'link': link,
                                         'position_pct': position_pct,
                                     }
-                                    print(f"    ✅ Analysis added for {ticker}")
-                                else:
-                                    print(f"    ⚠️  Analysis failed for {ticker}, skipping")
                             break
         except Exception as e:
             pass
@@ -436,26 +424,19 @@ def main():
     # Create portfolio positions dict for advisor context
     portfolio_positions = {ticker: info for ticker, info in PORTFOLIO.items()}
 
-    print("🔄 Fetching market news...")
     market_news = fetch_market_news()
-    print(f"   Found {len(market_news)} market news items\n")
-
-    print("🔄 Fetching portfolio news...")
     portfolio_news = fetch_portfolio_news(portfolio_positions)
-    print(f"   Found {len(portfolio_news)} portfolio news items\n")
 
     # Generate email
     today = datetime.now().strftime('%d %B %Y')
     subject = f"📌 Dagelijkse beursupdate – {today}"
     html_body = generate_email_html(market_news, portfolio_news, portfolio_positions)
 
-    print("📧 Sending email...\n")
-
     # Send email
     if send_email('alfendirk@gmail.com', subject, html_body):
-        print("\n✅ Daily stock news email sent successfully!")
+        print("✅ Email sent successfully")
     else:
-        print("\n❌ Failed to send email")
+        print("❌ Failed to send email")
         exit(1)
 
 if __name__ == '__main__':
