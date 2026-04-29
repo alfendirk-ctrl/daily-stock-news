@@ -16,7 +16,7 @@ import re
 from bs4 import BeautifulSoup
 from anthropic import Anthropic
 
-# Portfolio with position sizes (%)
+# Portfolio with position sizes (%) - Updated April 2026
 PORTFOLIO = {
     'ADBE': {'name': 'Adobe', 'pct': 5.7},
     'COIN': {'name': 'Coinbase', 'pct': 7.6},
