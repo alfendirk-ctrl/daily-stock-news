@@ -9,6 +9,7 @@ import os
 import smtplib
 import feedparser
 import requests
+import json
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -16,42 +17,29 @@ import re
 from bs4 import BeautifulSoup
 from anthropic import Anthropic
 
-# Portfolio with position sizes (%) - Updated April 2026
-PORTFOLIO = {
-    'ADBE': {'name': 'Adobe', 'pct': 5.7},
-    'COIN': {'name': 'Coinbase', 'pct': 7.6},
-    'VWRL': {'name': 'VWRL (All-World ETF)', 'pct': 8.5},
-    'SMH': {'name': 'VanEck Semiconductors', 'pct': 4.3},
-    'NFLX': {'name': 'Netflix', 'pct': 3.6},
-    'NVDA': {'name': 'Nvidia', 'pct': 3.8},
-    'GOOGL': {'name': 'Alphabet', 'pct': 4.8},
-    'ESPO': {'name': 'VanEck Gaming & Esports', 'pct': 3.9},
-    'VOW3': {'name': 'Volkswagen', 'pct': 3.7},
-    'SHELL': {'name': 'Shell', 'pct': 3.0},
-    'SQ': {'name': 'Block', 'pct': 2.8},
-    'AMZN': {'name': 'Amazon', 'pct': 2.4},
-    'ORCL': {'name': 'Oracle', 'pct': 2.8},
-    'PYPL': {'name': 'PayPal', 'pct': 2.7},
-    'PLTR': {'name': 'Palantir', 'pct': 1.9},
-    'QLYS': {'name': 'Qualys', 'pct': 2.7},
-    'NKE': {'name': 'Nike', 'pct': 1.9},
-    'SBUX': {'name': 'Starbucks', 'pct': 1.9},
-    'DUOL': {'name': 'Duolingo', 'pct': 1.8},
-    'NVO': {'name': 'Novo Nordisk ADR', 'pct': 1.5},
-    'DIS': {'name': 'Walt Disney', 'pct': 2.0},
-    'T': {'name': 'AT&T', 'pct': 0.8},
-    'ULVR': {'name': 'Unilever', 'pct': 1.8},
-    'PINS': {'name': 'Pinterest', 'pct': 0.4},
-    'SNAP': {'name': 'Snap', 'pct': 0.3},
-    'HPQ': {'name': 'HP Inc', 'pct': 0.5},
-    'KO': {'name': 'Coca-Cola', 'pct': 1.2},
-    'ALFEN': {'name': 'Alfen', 'pct': 1.4},
-    'NIO': {'name': 'NIO ADR', 'pct': 0.8},
-    'FIGMA': {'name': 'Figma', 'pct': 0.4},
-    'FCEL': {'name': 'FuelCell Energy', 'pct': 0.0},
-    'SPCE': {'name': 'Virgin Galactic', 'pct': 0.0},
-}
+def load_portfolio():
+    """Load portfolio from portfolio.json."""
+    try:
+        with open('portfolio.json', 'r') as f:
+            data = json.load(f)
+            portfolio = {}
+            for item in data.get('portfolio', []):
+                portfolio[item['ticker']] = {
+                    'name': item['name'],
+                    'pct': item['pct']
+                }
+            return portfolio
+    except FileNotFoundError:
+        print("ERROR: portfolio.json not found")
+        exit(1)
+    except Exception as e:
+        print(f"ERROR loading portfolio: {e}")
+        exit(1)
 
+PORTFOLIO = load_portfolio()
+
+# Initialize Anthropic client
+client = Anthropic()
 # Initialize Anthropic client
 client = Anthropic()
 
