@@ -1,10 +1,10 @@
 name: Dagelijkse Beursbriefing
 
 on:
-  schedule:
-    # 18:00 UTC = 20:00 CEST (UTC+2), alleen werkdagen
-    - cron: '0 18 * * 1-5'
-  workflow_dispatch:  # handmatige trigger voor testen
+  # GEPAUZEERD — verwijder het commentaar bij schedule om te hervatten
+  # schedule:
+  #   - cron: '0 18 * * 1-5'  # 18:00 UTC = 20:00 CEST, alleen werkdagen
+  workflow_dispatch:  # handmatige trigger blijft beschikbaar
 
 permissions:
   contents: write  # nodig voor git commit + push van email_final.html
